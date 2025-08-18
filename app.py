@@ -241,7 +241,7 @@ def gerar_relatorio(
     return "".join(linhas)
 st.set_page_config(page_title="App Saúde – Jornada de Inovação", page_icon=None, layout="wide")
 
-# Estilos
+
 st.markdown(
     """
     <style>
@@ -290,7 +290,7 @@ with st.sidebar:
 
     rodar_btn = st.button("Rodar jornada")
 
-# Conteúdo principal
+
 st.title("App Saúde – Jornada de Desenvolvimento e Inovação")
 st.write(
     "Digite um tema na barra lateral e clique em **Rodar jornada**. "
@@ -314,7 +314,7 @@ if rodar_btn and tema.strip():
             {"topic": tema, "years": [int(ano_inicio), int(ano_fim)], "n_articles": int(qtd_artigos)}
         )
 
-    # ----------------------- PubMed (com tradução) -----------------------
+    # ----------------------- PubMed-----------------------
     with st.spinner("Buscando e traduzindo artigos da PubMed..."):
         try:
             artigos_df = get_dados_pubmed(

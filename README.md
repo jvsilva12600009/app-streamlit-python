@@ -32,7 +32,7 @@ Acesse o aplicativo ao vivo clicando no link abaixo:
 ├── app.py                ← Arquivo principal com a lógica do app
 ├── requirements.txt      ← Lista de dependências Python
 ├── utils/                ← Funções auxiliares (API, DB, tradução etc.)
-└── prints/               ← Prints de telas usados no README
+
 ```
 
 ---

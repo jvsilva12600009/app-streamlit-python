@@ -1,7 +1,6 @@
 import os
 from datetime import datetime
 from typing import Tuple
-
 from pymongo import MongoClient
 import streamlit as st
 import certifi
@@ -15,13 +14,12 @@ def get_db():
 
     cliente = MongoClient(
         MONGODB_URI,
-        tlsCAFile=certifi.where(),  # usa certificados confiáveis
+        tlsCAFile=certifi.where(),  
         uuidRepresentation="standard"
     )
     return cliente, cliente[NOME_BANCO]
 
 def get_configuracao(chave: str, padrao: str | None = None):
-    """Obtém configuração do secrets.toml ou de variáveis de ambiente."""
     try:
         return st.secrets[chave]
     except Exception:
@@ -34,10 +32,6 @@ NOME_BANCO = get_configuracao("DB_NAME", "saudeja")
 
 @st.cache_resource(show_spinner=False)
 def get_db() -> Tuple[MongoClient, object]:
-    """
-    Retorna conexão e banco de dados MongoDB.
-    A conexão é cacheada para evitar múltiplas instâncias.
-    """
     if not MONGODB_URI:
         st.error("MONGODB_URI não configurada. Defina em .streamlit/secrets.toml ou variáveis de ambiente.")
         st.stop()
@@ -47,10 +41,7 @@ def get_db() -> Tuple[MongoClient, object]:
 
 
 def registrar_evento(banco, id_sessao: str, acao: str, dados: dict | None = None):
-    """
-    Registra evento no banco (ex: cliques, ações do usuário).
-    Não interrompe a interface caso o log falhe.
-    """
+
     try:
         if not st.session_state.get("consent_logging", True):
             return

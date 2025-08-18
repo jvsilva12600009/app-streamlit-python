@@ -1,3 +1,4 @@
+
 import os
 import re
 import uuid
@@ -24,6 +25,7 @@ def _extrair_ano_qualquer(texto: str) -> int | pd._libs.missing.NAType:
 
 
 def _traduzir_seguro(txt: str) -> str:
+    
     if not txt:
         return txt
     try:
@@ -33,7 +35,10 @@ def _traduzir_seguro(txt: str) -> str:
 
 
 def get_dados_pubmed(termo: str, max_resultados: int = 50, ano_inicio: int = 2000, ano_fim: int = 2025) -> pd.DataFrame:
+    
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
+
+    
     url_busca = (
         f"{base_url}esearch.fcgi?db=pubmed"
         f"&term={requests.utils.quote(termo)}"
@@ -107,7 +112,6 @@ def get_dados_pubmed(termo: str, max_resultados: int = 50, ano_inicio: int = 200
 
     df = pd.DataFrame(artigos)
     return df
-
 def get_configuracao(chave: str, padrao: str | None = None):
     try:
         return st.secrets[chave]
@@ -133,6 +137,10 @@ def extrair_ano(valor: str):
 
 
 def normalizar_artigos(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Padroniza nomes de colunas; aqui já retornamos 'titulo' e 'resumo' em PT (vindos de get_dados_pubmed).
+    Mantemos 'titulo_en' e 'resumo_en' para referência.
+    """
     if df.empty:
         return pd.DataFrame(columns=[
             "pmid", "titulo", "titulo_en", "periodico", "data_publicacao", "resumo", "resumo_en", "ano"
@@ -153,6 +161,7 @@ def normalizar_artigos(df: pd.DataFrame) -> pd.DataFrame:
         df["ano"] = df["data_publicacao"].apply(extrair_ano)
     else:
         df["ano"] = pd.NA
+
     return df
 
 
@@ -230,34 +239,23 @@ def gerar_relatorio(
 
     linhas.append("\n---\n**Fontes:** PubMed (NCBI E-utilities), NYTimes COVID-19 dataset (https://github.com/nytimes/covid-19-data).\n")
     return "".join(linhas)
-
 st.set_page_config(page_title="App Saúde – Jornada de Inovação", page_icon=None, layout="wide")
+
 
 st.markdown(
     """
     <style>
     .stApp { background: linear-gradient(135deg, #f8f9fa, #e9ecef); font-family: "Segoe UI", sans-serif; color: #212529; }
     h1, h2, h3 { color: #003366; font-weight: 600; }
-    .stCard { background: blue; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .stCard { background: red; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
     section[data-testid="stSidebar"] { background-color: #f1f3f6; border-right: 2px solid #dee2e6; }
-
-    /* Botões de download vermelhos */
-    div.stDownloadButton > button {
-        background-color: red;
-        color: white;
-        border-radius: 8px;
-        padding: 0.6em 1.2em;
-        font-weight: 500;
-        transition: 0.3s;
-    }
-    div.stDownloadButton > button:hover {
-        background-color: darkred;
-        transform: scale(1.02);
-    }
+    div.stButton > button { background-color: red; color: white; border-radius: 8px; padding: 0.6em 1.2em; border: none; font-weight: 500; transition: 0.3s; }
+    div.stButton > button:hover { background-color:red; transform: scale(1.02); }
     </style>
     """,
     unsafe_allow_html=True
 )
+
 
 def _get_year_now() -> int:
     try:
@@ -273,9 +271,7 @@ if "session_id" not in st.session_state:
 
 cliente, banco = get_db()
 
-# --------------------------------
-# Sidebar e controles
-# --------------------------------
+
 with st.sidebar:
     st.title("Jornada Interativa")
     st.caption("Exploração guiada de oportunidades tecnológicas em saúde.")
@@ -294,9 +290,7 @@ with st.sidebar:
 
     rodar_btn = st.button("Rodar jornada")
 
-# --------------------------------
-# Página principal
-# --------------------------------
+
 st.title("App Saúde – Jornada de Desenvolvimento e Inovação")
 st.write(
     "Digite um tema na barra lateral e clique em **Rodar jornada**. "
@@ -339,6 +333,7 @@ if rodar_btn and tema.strip():
     if artigos_df.empty:
         st.info("Nenhum artigo encontrado para o tema no período selecionado.")
     else:
+   
         st.dataframe(
             artigos_df[["titulo", "ano", "periodico"]].rename(columns={
                 "titulo": "Título (PT)",
@@ -350,6 +345,7 @@ if rodar_btn and tema.strip():
 
         st.metric("Total artigos", len(artigos_df))
 
+ 
         if artigos_df["ano"].notna().sum() > 0:
             serie = artigos_df["ano"].dropna().astype(int).value_counts().sort_index()
             fig, ax = plt.subplots(figsize=(6,4))
@@ -360,11 +356,13 @@ if rodar_btn and tema.strip():
             ax.grid(axis="y", linestyle="--", alpha=0.7)
             st.pyplot(fig, use_container_width=True)
 
+
         with st.expander("Ver resumos (PT) – primeiros 5"):
             for _, row in artigos_df.head(5).iterrows():
                 titulo = row.get("titulo") or row.get("titulo_en") or "(sem título)"
                 resumo = row.get("resumo") or "(sem resumo)"
                 st.markdown(f"**• {titulo}**\n\n{resumo}\n")
+
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ----------------------- COVID NYTimes -----------------------------
@@ -423,38 +421,77 @@ if rodar_btn and tema.strip():
                     .max()
                     .sort_values("casos", ascending=False)
                 )
-                st.dataframe(resumo_estados.head(10))
-
+                st.dataframe(resumo_estados.head(20).rename(columns={
+                    "casos": "Casos",
+                    "mortes": "Mortes"
+                }))
+            else:
+                resumo_estados = pd.DataFrame()
+                st.warning("Coluna de estado não encontrada; mostrando apenas séries agregadas no tempo.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ----------------------- Tópicos e lacunas --------------------------------
-    topicos = build_topics(artigos_df.get("resumo", pd.Series(dtype=str)).tolist(), n_topics=5)
-    lacunas = ["Exemplo de oportunidade de inovação 1", "Exemplo de oportunidade de inovação 2"]
-
+    # ----------------------- Tópicos -----------------------
     st.markdown('<div class="stCard">', unsafe_allow_html=True)
-    st.subheader("Tópicos sugeridos")
-    for i, t in enumerate(topicos, 1):
-        st.markdown(f"**Tópico {i}:** {', '.join(t)}")
-    st.subheader("Oportunidades/Heurísticas")
-    for g in lacunas:
-        st.markdown(f"- {g}")
+    st.subheader("Tópicos (clusters) — Artigos")
+
+    textos_combinados = []
+    if not artigos_df.empty:
+        textos_combinados = [
+            f"{row.get('titulo_en', '')} {row.get('resumo_en', '')}"
+            for _, row in artigos_df.iterrows()
+        ]
+
+    topicos = []
+    if textos_combinados:
+        try:
+            topicos = build_topics(textos_combinados, num_clusters=5, max_caracteristicas=5000)
+            topicos = [traduzir_termos(t) for t in topicos]
+
+            for idx, t in enumerate(topicos, 1):
+                with st.expander(f"Tópico {idx}"):
+                    st.write(", ".join(t))
+        except Exception as e:
+            st.warning(f"Não foi possível extrair tópicos: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # ----------------------- Relatório para download --------------------------
-    relatorio_md = gerar_relatorio(tema, ano_inicio, ano_fim, artigos_df, covid_periodo, topicos, lacunas, resumo_estados)
-    pdf_bytes = gerar_pdf(relatorio_md)
+    # ----------------------- Heurísticas -----------------------
+    st.markdown('<div class="stCard">', unsafe_allow_html=True)
+    st.subheader("Sinais de oportunidade (heurísticas)")
+    lacunas = []
+    if not artigos_df.empty and not covid_periodo.empty:
+        artigos_por_ano = artigos_df["ano"].dropna().astype(int).value_counts().sort_index()
+        covid_por_ano = covid_periodo.groupby(covid_periodo["data"].dt.year)["casos"].sum()
 
+        for ano in sorted(set(artigos_por_ano.index) | set(covid_por_ano.index)):
+            qtd_artigos = int(artigos_por_ano.get(ano, 0))
+            casos = int(covid_por_ano.get(ano, 0))
+            if ano >= int(ano_fim) - 3 and qtd_artigos >= 5 and casos > 100000:
+                lacunas.append(f"Ano {ano}: alta produção acadêmica ({qtd_artigos}) com grande carga epidemiológica ({casos} casos).")
+
+    if lacunas:
+        for g in lacunas:
+            st.write("• ", g)
+    else:
+        st.caption("Nenhuma oportunidade óbvia detectada com a heurística atual.")
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ----------------------- Relatório -----------------------
+    st.markdown('<div class="stCard">', unsafe_allow_html=True)
+    st.subheader("Relatório")
+    relatorio = gerar_relatorio(tema, ano_inicio, ano_fim, artigos_df, covid_periodo, topicos, lacunas, resumo_estados)
     st.download_button(
-        label="Baixar relatório (Markdown)",
-        data=relatorio_md,
-        file_name="relatorio.md",
-        mime="text/markdown",
-        key="download_md"
+        "Baixar relatório (Markdown)",
+        data=relatorio.encode("utf-8"),
+        file_name=f"relatorio_{datetime.utcnow().date()}_{tema.replace(' ','_')}.md",
+        mime="text/markdown"
     )
+    pdf_bytes = gerar_pdf(relatorio)
     st.download_button(
-        label="Baixar relatório (PDF)",
+        "Baixar relatório (PDF)",
         data=pdf_bytes,
-        file_name="relatorio.pdf",
-        mime="application/pdf",
-        key="download_pdf"
+        file_name=f"relatorio_{datetime.utcnow().date()}_{tema.replace(' ','_')}.pdf",
+        mime="application/pdf"
     )
+    if consentimento:
+        registrar_evento(banco, st.session_state.session_id, "journey_done", {"topic": tema, "articles": len(artigos_df), "covid_rows": len(covid_periodo)})
+    st.markdown('</div>', unsafe_allow_html=True)

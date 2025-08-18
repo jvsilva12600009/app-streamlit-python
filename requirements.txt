@@ -1,0 +1,8 @@
+streamlit==1.38.*
+pymongo[srv]==4.8.*
+python-dotenv==1.0.*
+requests==2.32.*
+pandas==2.2.*
+matplotlib==3.9.*
+scikit-learn==1.5.*
+beautifulsoup4==4.12.*

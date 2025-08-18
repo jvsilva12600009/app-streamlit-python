@@ -4,7 +4,21 @@ from typing import Tuple
 
 from pymongo import MongoClient
 import streamlit as st
+import certifi
 
+
+@st.cache_resource(show_spinner=False)
+def get_db():
+    if not MONGODB_URI:
+        st.error("MONGODB_URI não configurada.")
+        st.stop()
+
+    cliente = MongoClient(
+        MONGODB_URI,
+        tlsCAFile=certifi.where(),  # usa certificados confiáveis
+        uuidRepresentation="standard"
+    )
+    return cliente, cliente[NOME_BANCO]
 
 def get_configuracao(chave: str, padrao: str | None = None):
     """Obtém configuração do secrets.toml ou de variáveis de ambiente."""

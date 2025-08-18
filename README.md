@@ -23,7 +23,8 @@ Acesse o aplicativo ao vivo clicando no link abaixo:
 -  **deep_translator** — para tradução automática de artigos
 
 ---
-
+## Como conectar ao banco de dados
+- Para conectar ao banco de dados basta inserir a conexão com o MongoDB Atlas, o nome do usuario e a senha, o Cluster e o nome da database
 
 ## Estrutura
 ```
@@ -44,6 +45,31 @@ Acesse o aplicativo ao vivo clicando no link abaixo:
 -  Agrupar artigos por **tópicos (clusters)**
 -  Gerar relatórios em **Markdown** ou **PDF**
 -  Opção de salvar interações (anonimamente)
+
+
+## Exemplo de uso 
+
+Pesquisa de artigos
+
+1 - Abra o app.
+
+2 - Digite “tratamento de diabetes” como tema.
+
+3 - Escolha o período de 2015 a 2025.
+
+4 - Defina a quantidade de artigos (50).
+
+5 - Clique em Rodar jornada.
+
+6 - O sistema exibirá:
+
+7 - Títulos traduzidos
+
+8 - Periódicos
+
+9 - Ano de publicação
+
+10 - Gráfico epidemiológico COVID-19
 
 
 

@@ -2,19 +2,65 @@ import os
 import re
 import uuid
 from datetime import datetime
-
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
-
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+from reportlab.lib.styles import getSampleStyleSheet
+import io
 from utils.db import get_db, registrar_evento
 from utils.nlp import build_topics
 from utils.pubmed import get_dados_pubmed
 from utils.covid import get_dados_covid
+from googletrans import Translator
+translator = Translator()
 
+st.set_page_config(page_title="App Saúde – Jornada de Inovação", page_icon=None, layout="wide")
 
-st.set_page_config(page_title="SaúdeJá – Jornada de Inovação", page_icon="🧭", layout="wide")
-
+# ========================
+# Estilos customizados
+# ========================
+st.markdown(
+    """
+    <style>
+    
+    .stApp {
+        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+        font-family: "Segoe UI", sans-serif;
+        color: #212529;
+    }
+    h1, h2, h3 {
+        color: #003366;
+        font-weight: 600;
+    }
+    .stCard {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        margin-bottom: 20px;
+    }
+    section[data-testid="stSidebar"] {
+        background-color: #f1f3f6;
+        border-right: 2px solid #dee2e6;
+    }
+    div.stButton > button {
+        background-color: #003366;
+        color: white;
+        border-radius: 8px;
+        padding: 0.6em 1.2em;
+        border: none;
+        font-weight: 500;
+        transition: 0.3s;
+    }
+    div.stButton > button:hover {
+        background-color: #00509e;
+        transform: scale(1.02);
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 def get_configuracao(chave: str, padrao: str | None = None):
     """Lê configuração do st.secrets ou variável de ambiente."""
@@ -63,23 +109,34 @@ def normalizar_artigos(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def traduzir_termos(lista_termos: list[str]) -> list[str]:
-    mapa = {
-        "brazil": "brasil",
-        "treatment": "tratamento",
-        "cancer": "câncer",
-        "diagnosis": "diagnóstico",
-        "associated": "associados",
-        "factors": "fatores",
-        "initiation": "iniciação",
-        "gastric": "gástrico",
-        "breast": "mama",
-        "women": "mulheres",
-    }
     traduzidos = []
     for termo in lista_termos:
-        t = termo.lower()
-        traduzidos.append(mapa.get(t, termo))
+        try:
+            t = translator.translate(termo, src="en", dest="pt").text
+            traduzidos.append(t)
+        except Exception:
+            traduzidos.append(termo)  
     return traduzidos
+
+def gerar_pdf(texto: str) -> bytes:
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(buffer)
+    styles = getSampleStyleSheet()
+    flowables = []
+
+    for linha in texto.splitlines():
+        if linha.strip().startswith("# "):  
+            flowables.append(Paragraph(f"<b>{linha.replace('#', '').strip()}</b>", styles["Title"]))
+        elif linha.strip().startswith("## "):  
+            flowables.append(Paragraph(f"<b>{linha.replace('#', '').strip()}</b>", styles["Heading2"]))
+        else:  # texto normal
+            flowables.append(Paragraph(linha, styles["Normal"]))
+        flowables.append(Spacer(1, 8))
+
+    doc.build(flowables)
+    pdf = buffer.getvalue()
+    buffer.close()
+    return pdf
 
 
 def gerar_relatorio(
@@ -105,8 +162,7 @@ def gerar_relatorio(
         for _, a in artigos.head(10).iterrows():
             data_pub = a.get("ano", "")
             titulo = a.get("titulo") or "(sem título)"
-            pmid = a.get("pmid", "")
-            linhas.append(f"- {titulo} ({data_pub}) [PMID:{pmid}]\n")
+            linhas.append(f"- {titulo} ({data_pub})\n")
 
     if not covid_periodo.empty and not resumo_estados.empty:
         linhas.append("\n## COVID-19 (amostra de estados)\n")
@@ -130,7 +186,7 @@ def gerar_relatorio(
 # ---------------------------
 # Configuração e sessão
 # ---------------------------
-BANCO = get_configuracao("DB_NAME", "saudeja")
+BANCO = get_configuracao("DB_NAME", "appsaude")
 LOG_PADRAO = True
 
 if "session_id" not in st.session_state:
@@ -142,7 +198,7 @@ cliente, banco = get_db()
 # Barra lateral
 # ---------------------------
 with st.sidebar:
-    st.title("🧭 Jornada Interativa")
+    st.title("Jornada Interativa")
     st.caption("Exploração guiada de oportunidades tecnológicas em saúde.")
 
     tema = st.text_input("Tema/assunto (ex.: tratamento de diabetes)", value="tratamento de diabetes")
@@ -157,18 +213,18 @@ with st.sidebar:
     st.subheader("Privacidade")
     st.checkbox("Permitir salvar interações (anônimo)", key="consent_logging", value=LOG_PADRAO)
 
-    rodar_btn = st.button("🚀 Rodar jornada")
+    rodar_btn = st.button("Rodar jornada")
 
 # ---------------------------
 # Conteúdo principal
 # ---------------------------
-st.title("SaúdeJá – Jornada de Desenvolvimento e Inovação")
+st.title("App Saúde – Jornada de Desenvolvimento e Inovação")
 st.write(
     "Digite um tema na barra lateral e clique em **Rodar jornada**. "
     "O app vai buscar artigos (PubMed), carregar dados epidemiológicos (NYTimes COVID), sugerir tópicos e gerar um relatório."
 )
 
-# 🔹 Inicializa sempre para evitar NameError
+
 artigos_df = pd.DataFrame()
 covid_df = pd.DataFrame()
 covid_periodo = pd.DataFrame()
@@ -185,9 +241,7 @@ if rodar_btn and tema.strip():
             {"topic": tema, "years": [int(ano_inicio), int(ano_fim)], "n_articles": int(qtd_artigos)}
         )
 
-    # -----------------------
-    # 1) PubMed
-    # -----------------------
+    # ----------------------- PubMed -----------------------
     with st.spinner("Buscando PubMed..."):
         try:
             artigos_df = get_dados_pubmed(
@@ -201,27 +255,33 @@ if rodar_btn and tema.strip():
             st.error(f"Erro ao buscar PubMed: {e}")
             artigos_df = pd.DataFrame()
 
-    st.subheader("📚 Artigos (PubMed)")
+    st.markdown('<div class="stCard">', unsafe_allow_html=True)
+    st.subheader("Artigos (PubMed)")
     if artigos_df.empty:
         st.info("Nenhum artigo encontrado para o tema no período selecionado.")
     else:
-        st.dataframe(artigos_df[["pmid", "titulo", "ano"]].rename(columns={
-            "pmid": "PMID",
-            "titulo": "Título",
-            "ano": "Ano"
-        }).head(200), use_container_width=True)
+        st.dataframe(
+            artigos_df[["titulo", "ano"]].rename(columns={
+                "titulo": "Título",
+                "ano": "Ano"
+            }).head(200),
+            use_container_width=True
+        )
 
         st.metric("Total artigos", len(artigos_df))
 
         if artigos_df["ano"].notna().sum() > 0:
             serie = artigos_df["ano"].dropna().astype(int).value_counts().sort_index()
-            fig, ax = plt.subplots()
-            serie.plot(kind="bar", ax=ax)
-            ax.set_xlabel("Ano"); ax.set_ylabel("Artigos"); ax.set_title("Publicações por Ano (PubMed)")
+            fig, ax = plt.subplots(figsize=(6,4))
+            serie.plot(kind="bar", ax=ax, color="#003366")
+            ax.set_xlabel("Ano")
+            ax.set_ylabel("Número de Artigos")
+            ax.set_title("Publicações por Ano (PubMed)", fontsize=14, weight="bold", color="#003366")
+            ax.grid(axis="y", linestyle="--", alpha=0.7)
             st.pyplot(fig, use_container_width=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
-    # -----------------------COVID NYTimes
-   
+    # -----------------------COVID NYTimes -----------------------------
     with st.spinner("Carregando dados NYTimes COVID-19..."):
         try:
             covid_df = get_dados_covid()
@@ -229,13 +289,13 @@ if rodar_btn and tema.strip():
             st.error(f"Erro ao carregar dados NYTimes: {e}")
             covid_df = pd.DataFrame()
 
-    st.subheader("📊 Dados epidemiológicos — NYTimes COVID-19 (Estados Unidos)")
+    st.markdown('<div class="stCard">', unsafe_allow_html=True)
+    st.subheader("Dados epidemiológicos — NYTimes COVID-19 (Estados Unidos)")
     if covid_df.empty:
         covid_periodo = pd.DataFrame()
         resumo_estados = pd.DataFrame()
         st.info("Dados COVID não disponíveis.")
     else:
-
         col_data = primeira_coluna_existente(covid_df, ["date", "Date", "data", "reported_date"])
         col_cases = primeira_coluna_existente(covid_df, ["cases", "Cases", "casos"])
         col_deaths = primeira_coluna_existente(covid_df, ["deaths", "Deaths", "mortes"])
@@ -255,7 +315,6 @@ if rodar_btn and tema.strip():
         if col_state and col_state != "estado":
             covid_df.rename(columns={col_state: "estado"}, inplace=True)
 
-    
         covid_df["casos"] = pd.to_numeric(covid_df.get("casos", pd.NA), errors="coerce")
         covid_df["mortes"] = pd.to_numeric(covid_df.get("mortes", pd.NA), errors="coerce")
 
@@ -285,11 +344,11 @@ if rodar_btn and tema.strip():
             else:
                 resumo_estados = pd.DataFrame()
                 st.warning("Coluna de estado não encontrada; mostrando apenas séries agregadas no tempo.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # -----------------------Tópicos -----------------------
-   
-
-    st.subheader("🧠 Tópicos (clusters) — Artigos")
+    st.markdown('<div class="stCard">', unsafe_allow_html=True)
+    st.subheader("Tópicos (clusters) — Artigos")
 
 textos_combinados = []
 if not artigos_df.empty:
@@ -310,10 +369,11 @@ if textos_combinados:
                 st.write(", ".join(t))
     except Exception as e:
         st.warning(f"Não foi possível extrair tópicos: {e}")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ----------------------- Heurísticas -----------------------
-   #
-    st.subheader("💡 Sinais de oportunidade (heurísticas)")
+    st.markdown('<div class="stCard">', unsafe_allow_html=True)
+    st.subheader("Sinais de oportunidade (heurísticas)")
     lacunas = []
     if not artigos_df.empty and not covid_periodo.empty:
         artigos_por_ano = artigos_df["ano"].dropna().astype(int).value_counts().sort_index()
@@ -330,17 +390,25 @@ if textos_combinados:
             st.write("• ", g)
     else:
         st.caption("Nenhuma oportunidade óbvia detectada com a heurística atual.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # ----------------------- Relatório -----------------------
-    
-    st.subheader("📝 Relatório")
+    st.markdown('<div class="stCard">', unsafe_allow_html=True)
+    st.subheader("Relatório")
     relatorio = gerar_relatorio(tema, ano_inicio, ano_fim, artigos_df, covid_periodo, topicos, lacunas, resumo_estados)
     st.download_button(
-        "⬇️ Baixar relatório (Markdown)",
+        "Baixar relatório (Markdown)",
         data=relatorio.encode("utf-8"),
         file_name=f"relatorio_{datetime.utcnow().date()}_{tema.replace(' ','_')}.md",
         mime="text/markdown"
     )
-
+    pdf_bytes = gerar_pdf(relatorio)
+    st.download_button(
+        "Baixar relatório (PDF)",
+        data=pdf_bytes,
+        file_name=f"relatorio_{datetime.utcnow().date()}_{tema.replace(' ','_')}.pdf",
+        mime="application/pdf"
+    )
     if consentimento:
         registrar_evento(banco, st.session_state.session_id, "journey_done", {"topic": tema, "articles": len(artigos_df), "covid_rows": len(covid_periodo)})
+    st.markdown('</div>', unsafe_allow_html=True)

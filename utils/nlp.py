@@ -39,14 +39,6 @@ def build_topics(
     num_clusters: int | None = None,   
     max_caracteristicas: int = 5000,
 ) -> List[List[str]]:
-    """
-    Gera tópicos a partir de uma lista de textos usando TF-IDF + KMeans.
-
-    :param textos: Lista de textos
-    :param n_clusters / num_clusters: Número de clusters/tópicos desejados
-    :param max_caracteristicas: Número máximo de features do TF-IDF
-    :return: Lista de tópicos (cada tópico é uma lista de termos)
-    """
     if not textos:
         return []
 

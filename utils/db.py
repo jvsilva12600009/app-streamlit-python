@@ -50,4 +50,4 @@ def registrar_evento(banco, id_sessao: str, acao: str, dados: dict | None = None
         })
     except Exception as erro:
         # não interrompe a UI por falha de log
-        st.sidebar.warning(f"Falha ao salvar log: {erro}")
+        st.sidebar.warning(f"")

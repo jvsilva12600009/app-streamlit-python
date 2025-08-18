@@ -247,7 +247,7 @@ st.markdown(
     <style>
     .stApp { background: linear-gradient(135deg, #f8f9fa, #e9ecef); font-family: "Segoe UI", sans-serif; color: #212529; }
     h1, h2, h3 { color: #003366; font-weight: 600; }
-    .stCard { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    .stCard { background: blue; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
     section[data-testid="stSidebar"] { background-color: #f1f3f6; border-right: 2px solid #dee2e6; }
     div.stButton > button { background-color: #003366; color: white; border-radius: 8px; padding: 0.6em 1.2em; border: none; font-weight: 500; transition: 0.3s; }
     div.stButton > button:hover { background-color: #00509e; transform: scale(1.02); }

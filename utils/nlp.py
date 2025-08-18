@@ -20,9 +20,6 @@ PALAVRAS_PARADAS = set(stopwords.words("portuguese")).union(ENGLISH_STOP_WORDS)
 
 
 def normalize(text: str) -> str:
-    """
-    Normaliza o texto: deixa minúsculo, remove acentos e caracteres especiais.
-    """
     if not isinstance(text, str):
         return ""
 
@@ -41,25 +38,19 @@ def build_topics(
 ) -> List[List[str]]:
     if not textos:
         return []
-
-   
     if num_clusters is not None:
         n_clusters = num_clusters
-
     vetor = TfidfVectorizer(
         max_features=max_caracteristicas,
         stop_words=list(PALAVRAS_PARADAS),
         preprocessor=normalize,
     )
-
     X = vetor.fit_transform(textos)
     n_clusters = min(n_clusters, X.shape[0])
     if n_clusters < 2:
         return []
-
     kmeans = KMeans(n_clusters=n_clusters, n_init=10, random_state=42)
     kmeans.fit(X)
-
     ordem_centroides = kmeans.cluster_centers_.argsort()[:, ::-1]
     termos = vetor.get_feature_names_out()
     topicos = []

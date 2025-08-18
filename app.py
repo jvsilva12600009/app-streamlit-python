@@ -1,67 +1,117 @@
+
 import os
 import re
 import uuid
+import io
 from datetime import datetime
+from typing import List, Dict
+import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
 from reportlab.lib.styles import getSampleStyleSheet
-import io
 from utils.db import get_db, registrar_evento
 from utils.nlp import build_topics
-from utils.pubmed import get_dados_pubmed
-from utils.covid import get_dados_covid
+from utils.covid import get_dados_covid  
 from deep_translator import GoogleTranslator
-translator = GoogleTranslator(source="en", target="pt")
+TRANSLATOR = GoogleTranslator(source="auto", target="pt")  
 
-st.set_page_config(page_title="App Saúde – Jornada de Inovação", page_icon=None, layout="wide")
+def _extrair_ano_qualquer(texto: str) -> int | pd._libs.missing.NAType:
+    if not texto:
+        return pd.NA
+    m = re.search(r"(19|20)\d{2}", str(texto))
+    return int(m.group(0)) if m else pd.NA
 
-# ========================
-# Estilos customizados
-# ========================
-st.markdown(
-    """
-    <style>
+
+def _traduzir_seguro(txt: str) -> str:
+    """Tenta traduzir; se falhar, retorna o original."""
+    if not txt:
+        return txt
+    try:
+        return TRANSLATOR.translate(txt)
+    except Exception:
+        return txt
+
+
+def get_dados_pubmed(termo: str, max_resultados: int = 50, ano_inicio: int = 2000, ano_fim: int = 2025) -> pd.DataFrame:
     
-    .stApp {
-        background: linear-gradient(135deg, #f8f9fa, #e9ecef);
-        font-family: "Segoe UI", sans-serif;
-        color: #212529;
-    }
-    h1, h2, h3 {
-        color: #003366;
-        font-weight: 600;
-    }
-    .stCard {
-        background: white;
-        padding: 20px;
-        border-radius: 12px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-        margin-bottom: 20px;
-    }
-    section[data-testid="stSidebar"] {
-        background-color: #f1f3f6;
-        border-right: 2px solid #dee2e6;
-    }
-    div.stButton > button {
-        background-color: #003366;
-        color: white;
-        border-radius: 8px;
-        padding: 0.6em 1.2em;
-        border: none;
-        font-weight: 500;
-        transition: 0.3s;
-    }
-    div.stButton > button:hover {
-        background-color: #00509e;
-        transform: scale(1.02);
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+    base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
+    # 1) Buscar PMIDs
+    url_busca = (
+        f"{base_url}esearch.fcgi?db=pubmed"
+        f"&term={requests.utils.quote(termo)}"
+        f"&retmax={int(max_resultados)}"
+        f"&retmode=json"
+        f"&datetype=pdat"
+        f"&mindate={int(ano_inicio)}"
+        f"&maxdate={int(ano_fim)}"
+    )
+    r = requests.get(url_busca, timeout=30)
+    r.raise_for_status()
+    ids = r.json().get("esearchresult", {}).get("idlist", [])
+    if not ids:
+        return pd.DataFrame(columns=[
+            "pmid", "titulo_en", "resumo_en", "titulo", "resumo",
+            "periodico", "data_publicacao", "ano"
+        ])
+    ids_str = ",".join(ids)
+    url_fetch = f"{base_url}efetch.fcgi?db=pubmed&id={ids_str}&retmode=xml"
+    rx = requests.get(url_fetch, timeout=60)
+    rx.raise_for_status()
+
+    import xml.etree.ElementTree as ET
+    root = ET.fromstring(rx.text)
+
+    artigos: List[Dict] = []
+    for art in root.findall(".//PubmedArticle"):
+        pmid_el = art.find(".//MedlineCitation/PMID")
+        pmid = pmid_el.text.strip() if pmid_el is not None and pmid_el.text else ""
+
+        t_el = art.find(".//Article/ArticleTitle")
+        titulo_en = "".join(t_el.itertext()).strip() if t_el is not None else ""
+        resumo_parts = []
+        for ab in art.findall(".//Article/Abstract/AbstractText"):
+            texto = "".join(ab.itertext()).strip()
+            if texto:
+                label = ab.attrib.get("Label") or ab.attrib.get("NlmCategory")
+                if label:
+                    resumo_parts.append(f"{label}: {texto}")
+                else:
+                    resumo_parts.append(texto)
+        resumo_en = "\n".join(resumo_parts).strip() if resumo_parts else ""
+        j_el = art.find(".//Article/Journal/Title")
+        periodico = j_el.text.strip() if j_el is not None and j_el.text else ""
+        year_el = art.find(".//Article/Journal/JournalIssue/PubDate/Year")
+        medline_date_el = art.find(".//Article/Journal/JournalIssue/PubDate/MedlineDate")
+        month_el = art.find(".//Article/Journal/JournalIssue/PubDate/Month")
+        day_el = art.find(".//Article/Journal/JournalIssue/PubDate/Day")
+        if year_el is not None and year_el.text:
+            y = year_el.text.strip()
+            m = month_el.text.strip() if month_el is not None and month_el.text else ""
+            d = day_el.text.strip() if day_el is not None and day_el.text else ""
+            data_publicacao = " ".join([x for x in [y, m, d] if x])
+        else:
+            data_publicacao = medline_date_el.text.strip() if medline_date_el is not None and medline_date_el.text else ""
+
+        ano = _extrair_ano_qualquer(data_publicacao)
+        titulo_pt = _traduzir_seguro(titulo_en)
+        resumo_pt = _traduzir_seguro(resumo_en)
+
+        artigos.append({
+            "pmid": pmid,
+            "titulo_en": titulo_en,
+            "resumo_en": resumo_en,
+            "titulo": titulo_pt,     
+            "resumo": resumo_pt,      
+            "periodico": periodico,
+            "data_publicacao": data_publicacao,
+            "ano": ano,
+        })
+
+    df = pd.DataFrame(artigos)
+    return df
 def get_configuracao(chave: str, padrao: str | None = None):
     """Lê configuração do st.secrets ou variável de ambiente."""
     try:
@@ -88,23 +138,31 @@ def extrair_ano(valor: str):
 
 
 def normalizar_artigos(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Padroniza nomes de colunas; aqui já retornamos 'titulo' e 'resumo' em PT (vindos de get_dados_pubmed).
+    Mantemos 'titulo_en' e 'resumo_en' para referência.
+    """
     if df.empty:
-        return pd.DataFrame(columns=["pmid", "titulo", "periodico", "data_publicacao", "resumo", "ano"])
+        return pd.DataFrame(columns=[
+            "pmid", "titulo", "titulo_en", "periodico", "data_publicacao", "resumo", "resumo_en", "ano"
+        ])
+    renomes = {
+        "title": "titulo",
+        "year": "ano",
+        "journal": "periodico",
+        "pubdate": "data_publicacao",
+        "abstract": "resumo",
+    }
+    for k, v in renomes.items():
+        if k in df.columns and v not in df.columns:
+            df.rename(columns={k: v}, inplace=True)
+    if "ano" in df.columns:
+        df["ano"] = df["ano"].apply(lambda x: extrair_ano(x) if not (isinstance(x, int) or pd.isna(x)) else x)
+    elif "data_publicacao" in df.columns:
+        df["ano"] = df["data_publicacao"].apply(extrair_ano)
+    else:
+        df["ano"] = pd.NA
 
-    # Padroniza nomes vindos da API
-    if "title" in df.columns:
-        df.rename(columns={"title": "titulo"}, inplace=True)
-    if "year" in df.columns:
-        df.rename(columns={"year": "ano"}, inplace=True)
-    if "journal" in df.columns:
-        df.rename(columns={"journal": "periodico"}, inplace=True)
-    if "pubdate" in df.columns:
-        df.rename(columns={"pubdate": "data_publicacao"}, inplace=True)
-    if "abstract" in df.columns:
-        df.rename(columns={"abstract": "resumo"}, inplace=True)
-
-    # Normaliza ano
-    df["ano"] = df["ano"].apply(extrair_ano) if "ano" in df.columns else df["data_publicacao"].apply(extrair_ano)
     return df
 
 
@@ -112,11 +170,12 @@ def traduzir_termos(lista_termos: list[str]) -> list[str]:
     traduzidos = []
     for termo in lista_termos:
         try:
-            t = translator.translate(termo)
+            t = TRANSLATOR.translate(termo)
             traduzidos.append(t)
         except Exception:
             traduzidos.append(termo)  
     return traduzidos
+
 
 def gerar_pdf(texto: str) -> bytes:
     buffer = io.BytesIO()
@@ -125,11 +184,11 @@ def gerar_pdf(texto: str) -> bytes:
     flowables = []
 
     for linha in texto.splitlines():
-        if linha.strip().startswith("# "):  
+        if linha.strip().startswith("# "):
             flowables.append(Paragraph(f"<b>{linha.replace('#', '').strip()}</b>", styles["Title"]))
-        elif linha.strip().startswith("## "):  
+        elif linha.strip().startswith("## "):
             flowables.append(Paragraph(f"<b>{linha.replace('#', '').strip()}</b>", styles["Heading2"]))
-        else:  # texto normal
+        else:
             flowables.append(Paragraph(linha, styles["Normal"]))
         flowables.append(Spacer(1, 8))
 
@@ -181,11 +240,30 @@ def gerar_relatorio(
 
     linhas.append("\n---\n**Fontes:** PubMed (NCBI E-utilities), NYTimes COVID-19 dataset (https://github.com/nytimes/covid-19-data).\n")
     return "".join(linhas)
+st.set_page_config(page_title="App Saúde – Jornada de Inovação", page_icon=None, layout="wide")
+
+# Estilos
+st.markdown(
+    """
+    <style>
+    .stApp { background: linear-gradient(135deg, #f8f9fa, #e9ecef); font-family: "Segoe UI", sans-serif; color: #212529; }
+    h1, h2, h3 { color: #003366; font-weight: 600; }
+    .stCard { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
+    section[data-testid="stSidebar"] { background-color: #f1f3f6; border-right: 2px solid #dee2e6; }
+    div.stButton > button { background-color: #003366; color: white; border-radius: 8px; padding: 0.6em 1.2em; border: none; font-weight: 500; transition: 0.3s; }
+    div.stButton > button:hover { background-color: #00509e; transform: scale(1.02); }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 
-# ---------------------------
-# Configuração e sessão
-# ---------------------------
+def _get_year_now() -> int:
+    try:
+        return datetime.utcnow().year
+    except Exception:
+        return 2025
+
 BANCO = get_configuracao("DB_NAME", "appsaude")
 LOG_PADRAO = True
 
@@ -194,9 +272,7 @@ if "session_id" not in st.session_state:
 
 cliente, banco = get_db()
 
-# ---------------------------
-# Barra lateral
-# ---------------------------
+
 with st.sidebar:
     st.title("Jornada Interativa")
     st.caption("Exploração guiada de oportunidades tecnológicas em saúde.")
@@ -205,8 +281,8 @@ with st.sidebar:
     ano_inicio, ano_fim = st.slider(
         "Período (ano)",
         2000,
-        datetime.utcnow().year,
-        (2015, datetime.utcnow().year),
+        _get_year_now(),
+        (2015, _get_year_now()),
     )
     qtd_artigos = st.number_input("Qtd. de artigos (PubMed)", min_value=5, max_value=200, value=50, step=5)
 
@@ -215,15 +291,13 @@ with st.sidebar:
 
     rodar_btn = st.button("Rodar jornada")
 
-# ---------------------------
 # Conteúdo principal
-# ---------------------------
 st.title("App Saúde – Jornada de Desenvolvimento e Inovação")
 st.write(
     "Digite um tema na barra lateral e clique em **Rodar jornada**. "
-    "O app vai buscar artigos (PubMed), carregar dados epidemiológicos (NYTimes COVID), sugerir tópicos e gerar um relatório."
+    "O app vai buscar artigos (PubMed, já traduzidos com deep_translator), "
+    "carregar dados epidemiológicos (NYTimes COVID), sugerir tópicos e gerar um relatório."
 )
-
 
 artigos_df = pd.DataFrame()
 covid_df = pd.DataFrame()
@@ -241,8 +315,8 @@ if rodar_btn and tema.strip():
             {"topic": tema, "years": [int(ano_inicio), int(ano_fim)], "n_articles": int(qtd_artigos)}
         )
 
-    # ----------------------- PubMed -----------------------
-    with st.spinner("Buscando PubMed..."):
+    # ----------------------- PubMed (com tradução) -----------------------
+    with st.spinner("Buscando e traduzindo artigos da PubMed..."):
         try:
             artigos_df = get_dados_pubmed(
                 termo=tema,
@@ -252,24 +326,27 @@ if rodar_btn and tema.strip():
             )
             artigos_df = normalizar_artigos(artigos_df)
         except Exception as e:
-            st.error(f"Erro ao buscar PubMed: {e}")
+            st.error(f"Erro ao buscar/normalizar PubMed: {e}")
             artigos_df = pd.DataFrame()
 
     st.markdown('<div class="stCard">', unsafe_allow_html=True)
-    st.subheader("Artigos (PubMed)")
+    st.subheader("Artigos (PubMed) – já em Português")
     if artigos_df.empty:
         st.info("Nenhum artigo encontrado para o tema no período selecionado.")
     else:
+   
         st.dataframe(
-            artigos_df[["titulo", "ano"]].rename(columns={
-                "titulo": "Título",
-                "ano": "Ano"
+            artigos_df[["titulo", "ano", "periodico"]].rename(columns={
+                "titulo": "Título (PT)",
+                "ano": "Ano",
+                "periodico": "Periódico"
             }).head(200),
             use_container_width=True
         )
 
         st.metric("Total artigos", len(artigos_df))
 
+ 
         if artigos_df["ano"].notna().sum() > 0:
             serie = artigos_df["ano"].dropna().astype(int).value_counts().sort_index()
             fig, ax = plt.subplots(figsize=(6,4))
@@ -279,9 +356,17 @@ if rodar_btn and tema.strip():
             ax.set_title("Publicações por Ano (PubMed)", fontsize=14, weight="bold", color="#003366")
             ax.grid(axis="y", linestyle="--", alpha=0.7)
             st.pyplot(fig, use_container_width=True)
+
+
+        with st.expander("Ver resumos (PT) – primeiros 5"):
+            for _, row in artigos_df.head(5).iterrows():
+                titulo = row.get("titulo") or row.get("titulo_en") or "(sem título)"
+                resumo = row.get("resumo") or "(sem resumo)"
+                st.markdown(f"**• {titulo}**\n\n{resumo}\n")
+
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # -----------------------COVID NYTimes -----------------------------
+    # ----------------------- COVID NYTimes -----------------------------
     with st.spinner("Carregando dados NYTimes COVID-19..."):
         try:
             covid_df = get_dados_covid()
@@ -346,29 +431,29 @@ if rodar_btn and tema.strip():
                 st.warning("Coluna de estado não encontrada; mostrando apenas séries agregadas no tempo.")
     st.markdown('</div>', unsafe_allow_html=True)
 
-    # -----------------------Tópicos -----------------------
+    # ----------------------- Tópicos -----------------------
     st.markdown('<div class="stCard">', unsafe_allow_html=True)
     st.subheader("Tópicos (clusters) — Artigos")
 
-textos_combinados = []
-if not artigos_df.empty:
-    textos_combinados = [
-        f"{row.get('titulo', '')} {row.get('resumo', '')}"
-        for _, row in artigos_df.iterrows()
-    ]
+    textos_combinados = []
+    if not artigos_df.empty:
+        textos_combinados = [
+            f"{row.get('titulo_en', '')} {row.get('resumo_en', '')}"
+            for _, row in artigos_df.iterrows()
+        ]
 
-topicos = []
-if textos_combinados:
-    try:
-        topicos = build_topics(textos_combinados, num_clusters=5, max_caracteristicas=5000)
-        
-        topicos = [traduzir_termos(t) for t in topicos]
+    topicos = []
+    if textos_combinados:
+        try:
+            topicos = build_topics(textos_combinados, num_clusters=5, max_caracteristicas=5000)
+            # traduz etiquetas dos tópicos para PT
+            topicos = [traduzir_termos(t) for t in topicos]
 
-        for idx, t in enumerate(topicos, 1):
-            with st.expander(f"Tópico {idx}"):
-                st.write(", ".join(t))
-    except Exception as e:
-        st.warning(f"Não foi possível extrair tópicos: {e}")
+            for idx, t in enumerate(topicos, 1):
+                with st.expander(f"Tópico {idx}"):
+                    st.write(", ".join(t))
+        except Exception as e:
+            st.warning(f"Não foi possível extrair tópicos: {e}")
     st.markdown('</div>', unsafe_allow_html=True)
 
     # ----------------------- Heurísticas -----------------------

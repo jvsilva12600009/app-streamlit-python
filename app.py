@@ -445,7 +445,6 @@ if rodar_btn and tema.strip():
     if textos_combinados:
         try:
             topicos = build_topics(textos_combinados, num_clusters=5, max_caracteristicas=5000)
-            # traduz etiquetas dos tópicos para PT
             topicos = [traduzir_termos(t) for t in topicos]
 
             for idx, t in enumerate(topicos, 1):

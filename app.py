@@ -12,8 +12,8 @@ from utils.db import get_db, registrar_evento
 from utils.nlp import build_topics
 from utils.pubmed import get_dados_pubmed
 from utils.covid import get_dados_covid
-from googletrans import Translator
-translator = Translator()
+from deep_translator import GoogleTranslator
+translator = GoogleTranslator(source="en", target="pt")
 
 st.set_page_config(page_title="App Saúde – Jornada de Inovação", page_icon=None, layout="wide")
 
@@ -112,7 +112,7 @@ def traduzir_termos(lista_termos: list[str]) -> list[str]:
     traduzidos = []
     for termo in lista_termos:
         try:
-            t = translator.translate(termo, src="en", dest="pt").text
+            t = translator.translate(termo)
             traduzidos.append(t)
         except Exception:
             traduzidos.append(termo)  

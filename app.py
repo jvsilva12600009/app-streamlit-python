@@ -25,7 +25,7 @@ def _extrair_ano_qualquer(texto: str) -> int | pd._libs.missing.NAType:
 
 
 def _traduzir_seguro(txt: str) -> str:
-    """Tenta traduzir; se falhar, retorna o original."""
+    
     if not txt:
         return txt
     try:
@@ -38,7 +38,7 @@ def get_dados_pubmed(termo: str, max_resultados: int = 50, ano_inicio: int = 200
     
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 
-    # 1) Buscar PMIDs
+    
     url_busca = (
         f"{base_url}esearch.fcgi?db=pubmed"
         f"&term={requests.utils.quote(termo)}"
@@ -113,7 +113,6 @@ def get_dados_pubmed(termo: str, max_resultados: int = 50, ano_inicio: int = 200
     df = pd.DataFrame(artigos)
     return df
 def get_configuracao(chave: str, padrao: str | None = None):
-    """Lê configuração do st.secrets ou variável de ambiente."""
     try:
         return st.secrets[chave]
     except Exception:

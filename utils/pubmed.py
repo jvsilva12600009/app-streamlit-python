@@ -6,8 +6,6 @@ from typing import List, Dict
 def get_dados_pubmed(termo: str, max_resultados: int = 50, ano_inicio: int = 2000, ano_fim: int = 2025) -> pd.DataFrame:
     
     base_url = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
-
-    # 🔹 Primeiro: buscar os IDs dos artigos
     url_busca = (
         f"{base_url}esearch.fcgi?db=pubmed"
         f"&term={termo}"
@@ -23,8 +21,7 @@ def get_dados_pubmed(termo: str, max_resultados: int = 50, ano_inicio: int = 200
 
     if not ids:
         return pd.DataFrame(columns=["pmid", "titulo", "ano"])
-
-    # 🔹 Depois: buscar os detalhes dos artigos
+s
     ids_str = ",".join(ids)
     url_detalhes = f"{base_url}esummary.fcgi?db=pubmed&id={ids_str}&retmode=json"
     resp_detalhes = requests.get(url_detalhes)

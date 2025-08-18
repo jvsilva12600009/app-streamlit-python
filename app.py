@@ -250,7 +250,7 @@ st.markdown(
     .stCard { background: blue; padding: 20px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.1); margin-bottom: 20px; }
     section[data-testid="stSidebar"] { background-color: #f1f3f6; border-right: 2px solid #dee2e6; }
     div.stButton > button { background-color: red; color: white; border-radius: 8px; padding: 0.6em 1.2em; border: none; font-weight: 500; transition: 0.3s; }
-    div.stButton > button:hover { background-color: white; transform: scale(1.02); }
+    div.stButton > button:hover { background-color:red; transform: scale(1.02); }
     </style>
     """,
     unsafe_allow_html=True
